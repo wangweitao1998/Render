@@ -81,6 +81,20 @@ public:
 	}
 };
 
+class luminous : public material {
+public:
+	luminous() = default;
+	luminous(color _albedo) : material(_albedo) {}
+
+	virtual void scattar(const ray& r, const hit_record& rec, color* attenuation, ray* scattered) {
+		point surface_point = r.origin + r.dir * rec.t;
+		vec3f reflect = vec3f(0, 0, 0);
+		scattered->origin = surface_point;
+		scattered->dir = reflect;
+		*attenuation = albedo;
+	}
+};
+
 class hittable {
 public:
 	hittable() = default;
@@ -166,7 +180,7 @@ public:
 };
 const unsigned int width_sampling = 1920;
 const unsigned int height_sampling = 1080;
-const unsigned int multi_sampling = 10;
+const unsigned int multi_sampling = 3000;
 
 //const float view_port_width = 16;
 //const float view_port_height = 9;
@@ -202,13 +216,21 @@ color get_color(ray r, int dep = 50) {
 		}
 		if (hit) {
 			world[ind]->m->scattar(r, get_rec, &attenuation, &scattered);
-			color res = get_color(scattered, dep - 1);
-			return color(attenuation.x() * res.x(), attenuation.y() * res.y(), attenuation.z() * res.z());
+			// 非发光体
+			if (scattered.dir != vec3f(0, 0, 0)) {
+				color res = get_color(scattered, dep - 1);
+				return color(attenuation.x() * res.x(), attenuation.y() * res.y(), attenuation.z() * res.z());
+			}
+			// 发光体返回(0, 0, 0)光线方向
+			else {
+				return color(attenuation.x(), attenuation.y(), attenuation.z());
+			}
 		}
 		vec3f v = r.dir.normalized();
 		float t = 0.5 * (v.y() + 1.0f);
 
-		return (1.0 - t) * color(1.0, 1.0, 1.0) + t * color(0.5, 0.7, 1.0);
+		// return (1.0 - t) * color(1.0, 1.0, 1.0) + t * color(0.5, 0.7, 1.0);
+		return color(0, 0, 0);
 	}
 	return color(0, 0, 0);
 }
@@ -216,17 +238,18 @@ color get_color(ray r, int dep = 50) {
 int main() {
 	material* m1 = new metal(color(0.8, 0.8, 0.8));
 	material* m2 = new metal(color(.8, .6, .2));
-	material* m3 = new lambertian(color(.8, .8, .0));
+	material* m3 = new lambertian(color(.8, .8, .8));
 	material* m4 = new lambertian(color(.7, .3, .3));
+	material* l = new luminous(color(1, .9, .9));
 
 	world.push_back(new sphere(vec3f(-1, 0, -1), 0.5, m1));
-	world.push_back(new sphere(vec3f(0, 0, -1), 0.5, m3));
+	world.push_back(new sphere(vec3f(0, 0, -1), 0.5, l));
 	world.push_back(new sphere(vec3f(1, 0, -1), 0.5, m2));
 
-	world.push_back(new sphere(vec3f(0, -100.5, -1), 100, m1));
+	world.push_back(new sphere(vec3f(0, -100.5, -1), 100, m3));
 
 	data = (pixel*)malloc(sizeof(pixel) * 1920 * 1080);
-	omp_set_num_threads(12);
+	omp_set_num_threads(16);
 	#pragma omp parallel for
 	for (int y = height_sampling - 1; y >= 0; --y) {
 		std::cout << y << std::endl;
